@@ -1,0 +1,73 @@
+<mxfile host="app.diagrams.net" version="21.0.0">
+  <diagram id="schema-er" name="AgriRent Database Schema">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Title -->
+        <mxCell id="title" value="AgriRent — Database Schema ER Diagram (CS543 Assignment 2)&#xa;Strict Microservice Boundaries with Logical/Referential Relationships" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="20" width="520" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- =================== USER SERVICE =================== -->
+        <mxCell id="t_users" value="&lt;b&gt;users (User Service)&lt;/b&gt;&lt;hr&gt;+ user_id [PK] : VARCHAR(36)&lt;br&gt;• name : VARCHAR(100)&lt;br&gt;• email [UQ] : VARCHAR(120)&lt;br&gt;• phone [UQ] : VARCHAR(20)&lt;br&gt;• password_hash : VARCHAR(255)&lt;br&gt;• kyc_status : VARCHAR(20)&lt;br&gt;• account_status : VARCHAR(20)&lt;br&gt;• created_at : TIMESTAMP" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="220" height="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="t_kyc" value="&lt;b&gt;kyc_records (User Service)&lt;/b&gt;&lt;hr&gt;+ kyc_id [PK] : VARCHAR(36)&lt;br&gt;* user_id [FK] : VARCHAR(36)&lt;br&gt;• provider_ref : VARCHAR(100)&lt;br&gt;• verification_status : VARCHAR(20)&lt;br&gt;• verified_at : TIMESTAMP" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="360" width="220" height="110" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel_user_kyc" value="1 to 0..1 (FK)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;" edge="1" parent="1" source="t_users" target="t_kyc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- =================== CATALOGUE SERVICE =================== -->
+        <mxCell id="t_equipment" value="&lt;b&gt;equipment (Catalogue Service)&lt;/b&gt;&lt;hr&gt;+ equipment_id [PK] : VARCHAR(36)&lt;br&gt;• owner_id [Ref] : VARCHAR(36)&lt;br&gt;• name : VARCHAR(150)&lt;br&gt;• category : VARCHAR(50)&lt;br&gt;• price_per_day : DECIMAL(10,2)&lt;br&gt;• security_deposit : DECIMAL(10,2)&lt;br&gt;• late_fine_per_day : DECIMAL(10,2)&lt;br&gt;• status : VARCHAR(20)" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="840" y="100" width="250" height="150" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="t_locks" value="&lt;b&gt;equipment_availability_locks&lt;/b&gt;&lt;hr&gt;+ lock_id [PK] : VARCHAR(36)&lt;br&gt;* equipment_id [FK] : VARCHAR(36)&lt;br&gt;• start_date : DATE&lt;br&gt;• end_date : DATE&lt;br&gt;• is_locked : BOOLEAN" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="840" y="360" width="250" height="110" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="rel_equip_lock" value="1 to many (FK)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;" edge="1" parent="1" source="t_equipment" target="t_locks">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- =================== BOOKING SERVICE =================== -->
+        <mxCell id="t_bookings" value="&lt;b&gt;bookings (Booking Service)&lt;/b&gt;&lt;hr&gt;+ booking_id [PK] : VARCHAR(36)&lt;br&gt;• renter_id [Ref User] : VARCHAR(36)&lt;br&gt;• owner_id [Ref User] : VARCHAR(36)&lt;br&gt;• equipment_id [Ref Equip] : VARCHAR(36)&lt;br&gt;• start_date : DATE&lt;br&gt;• end_date : DATE&lt;br&gt;• number_of_days : INT&lt;br&gt;• rental_amount : DECIMAL(10,2)&lt;br&gt;• security_deposit : DECIMAL(10,2)&lt;br&gt;• platform_fee : DECIMAL(10,2)&lt;br&gt;• handover_pin : VARCHAR(6)&lt;br&gt;• return_pin : VARCHAR(6)&lt;br&gt;• status : VARCHAR(25)&lt;br&gt;• created_at : TIMESTAMP" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="440" y="90" width="260" height="230" as="geometry" />
+        </mxCell>
+        
+        <!-- =================== PAYMENT SERVICE =================== -->
+        <mxCell id="t_payments" value="&lt;b&gt;payment_transactions (Payment Service)&lt;/b&gt;&lt;hr&gt;+ transaction_id [PK] : VARCHAR(36)&lt;br&gt;• booking_id [Ref Book] : VARCHAR(36)&lt;br&gt;• payer_id [Ref User] : VARCHAR(36)&lt;br&gt;• amount : DECIMAL(10,2)&lt;br&gt;• payment_type : VARCHAR(30)&lt;br&gt;• gateway_reference : VARCHAR(100)&lt;br&gt;• status : VARCHAR(20)&lt;br&gt;• created_at : TIMESTAMP" style="rounded=0;whiteSpace=wrap;html=1;align=left;spacingLeft=8;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="440" y="440" width="260" height="150" as="geometry" />
+        </mxCell>
+        
+        <!-- CROSS-BOUNDARY LOGICAL RELATIONSHIP ARROWS -->
+        
+        <!-- Bookings to Users (Logical FK Renter/Owner) -->
+        <mxCell id="rel_book_user" value="Many-to-1 Ref" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#333333;dashed=1;" edge="1" parent="1" source="t_bookings" target="t_users">
+          <mxGeometry x="-0.02" y="10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Bookings to Equipment (Logical FK Equipment ID) -->
+        <mxCell id="rel_book_equip" value="Many-to-1 Ref" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#333333;dashed=1;" edge="1" parent="1" source="t_bookings" target="t_equipment">
+          <mxGeometry x="-0.02" y="-10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Bookings to Payments (Logical Relationship linking transaction back to the contract trigger) -->
+        <mxCell id="rel_book_pay" value="1 to Many Ref" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=2;strokeColor=#333333;dashed=1;" edge="1" parent="1" source="t_bookings" target="t_payments">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
