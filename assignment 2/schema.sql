@@ -1,8 +1,3 @@
--- =======================================================
--- CS543 Assignment 2: AgriRent Database Schema
--- Strict Service Boundaries (No table shared across services)
--- =======================================================
-
 -- 1. USER SERVICE DATABASE
 CREATE TABLE users (
     user_id VARCHAR(36) PRIMARY KEY,
