@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="AgriPayEscrowService"
+             targetNamespace="http://escrow.agripay.bank.in/ws/escrow"
+             xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://escrow.agripay.bank.in/ws/escrow"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+  <!-- 1. TYPES: Data Contracts -->
+  <types>
+    <xsd:schema targetNamespace="http://escrow.agripay.bank.in/ws/escrow" elementFormDefault="qualified">
+      
+      <!-- Authentication Header Element -->
+      <xsd:element name="PartnerAuthHeader">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="MerchantId" type="xsd:string"/>
+            <xsd:element name="ApiKey" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <!-- Request Body Element -->
+      <xsd:element name="AuthorizeEscrowHoldRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="BookingReference" type="xsd:string"/>
+            <xsd:element name="PayerVpaOrToken" type="xsd:string"/>
+            <xsd:element name="RentalFeeAmount" type="xsd:decimal"/>
+            <xsd:element name="SecurityDepositAmount" type="xsd:decimal"/>
+            <xsd:element name="Currency" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <!-- Success Response Element -->
+      <xsd:element name="AuthorizeEscrowHoldResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="EscrowTransactionId" type="xsd:string"/>
+            <xsd:element name="HoldStatus" type="xsd:string"/>
+            <xsd:element name="TotalHeldAmount" type="xsd:decimal"/>
+            <xsd:element name="HoldExpiresAt" type="xsd:dateTime"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <!-- Fault Element -->
+      <xsd:element name="EscrowFaultDetail">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="PartnerErrorCode" type="xsd:string"/>
+            <xsd:element name="ErrorDescription" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+    </xsd:schema>
+  </types>
+
+  <!-- 2. MESSAGES: Inputs and Outputs -->
+  <message name="AuthHeaderMessage">
+    <part name="header" element="tns:PartnerAuthHeader"/>
+  </message>
+
+  <message name="AuthorizeEscrowHoldInput">
+    <part name="parameters" element="tns:AuthorizeEscrowHoldRequest"/>
+  </message>
+
+  <message name="AuthorizeEscrowHoldOutput">
+    <part name="parameters" element="tns:AuthorizeEscrowHoldResponse"/>
+  </message>
+
+  <message name="EscrowFaultMessage">
+    <part name="fault" element="tns:EscrowFaultDetail"/>
+  </message>
+
+  <!-- 3. PORT TYPE: Abstract Interface -->
+  <portType name="AgriPayEscrowPortType">
+    <operation name="authorizeEscrowHold">
+      <input message="tns:AuthorizeEscrowHoldInput"/>
+      <output message="tns:AuthorizeEscrowHoldOutput"/>
+      <fault name="EscrowFault" message="tns:EscrowFaultMessage"/>
+    </operation>
+  </portType>
+
+  <!-- 4. BINDING: SOAP 1.1 Over HTTP -->
+  <binding name="AgriPayEscrowSoapBinding" type="tns:AgriPayEscrowPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    
+    <operation name="authorizeEscrowHold">
+      <soap:operation soapAction="http://escrow.agripay.bank.in/ws/escrow/authorizeEscrowHold"/>
+      <input>
+        <soap:header message="tns:AuthHeaderMessage" part="header" use="literal"/>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+      <fault name="EscrowFault">
+        <soap:fault name="EscrowFault" use="literal"/>
+      </fault>
+    </operation>
+  </binding>
+
+  <!-- 5 & 6. SERVICE and PORT: Physical Endpoint URL -->
+  <service name="AgriPayEscrowService">
+    <documentation>Agricultural Banking Escrow Holding Gateway for AgriRent</documentation>
+    <port name="AgriPayEscrowPort" binding="tns:AgriPayEscrowSoapBinding">
+      <soap:address location="https://escrow-gateway.agripay.bank.in/v2/soap/escrow"/>
+    </port>
+  </service>
+
+</definitions>
