@@ -1,0 +1,238 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Booking Service API
+  description: Core reservation management for agricultural machinery peer-to-peer rentals.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000/v1
+    description: Local development server
+
+paths:
+  /bookings:
+    post:
+      summary: Create a new equipment booking
+      operationId: createBooking
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Unique key to safely retry requests without double booking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URI of the newly created booking resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400':
+          description: Malformed request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Equipment schedule conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Business validation rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    get:
+      summary: List bookings with status filter
+      operationId: listBookings
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, CANCELLED]
+          description: Filter bookings by operational state.
+      responses:
+        '200':
+          description: Filtered array of booking records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingResponse'
+        '400':
+          description: Invalid filter parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /bookings/{booking_id}:
+    get:
+      summary: Fetch booking details by ID
+      operationId: getBookingById
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '404':
+          description: Booking resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /bookings/{booking_id}/cancellation:
+    post:
+      summary: State-changing sub-resource to cancel a reservation
+      operationId: cancelBooking
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Booking cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '404':
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Cannot cancel a booking in current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  schemas:
+    CreateBookingRequest:
+      type: object
+      required:
+        - renter_id
+        - equipment_id
+        - start_date
+        - end_date
+        - rental_rate_per_day
+      properties:
+        renter_id:
+          type: string
+          example: "usr_9918"
+        equipment_id:
+          type: string
+          example: "eq_7721"
+        start_date:
+          type: string
+          format: date
+          example: "2026-11-01"
+        end_date:
+          type: string
+          format: date
+          example: "2026-11-05"
+        rental_rate_per_day:
+          type: number
+          example: 1500.00
+
+    CancelBookingRequest:
+      type: object
+      required:
+        - cancellation_reason
+      properties:
+        cancellation_reason:
+          type: string
+          example: "Field harvesting postponed due to unseasonal rain"
+
+    BookingResponse:
+      type: object
+      required:
+        - id
+        - renter_id
+        - equipment_id
+        - start_date
+        - end_date
+        - total_cost
+        - status
+      properties:
+        id:
+          type: string
+          example: "bk_a84f3"
+        renter_id:
+          type: string
+          example: "usr_9918"
+        equipment_id:
+          type: string
+          example: "eq_7721"
+        start_date:
+          type: string
+          example: "2026-11-01"
+        end_date:
+          type: string
+          example: "2026-11-05"
+        total_days:
+          type: integer
+          example: 4
+        total_cost:
+          type: number
+          example: 6000.00
+        status:
+          type: string
+          example: "PENDING"
+        cancellation_reason:
+          type: string
+          nullable: true
+
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
