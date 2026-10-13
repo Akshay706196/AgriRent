@@ -1,0 +1,266 @@
+===== CS543 Assignment 5: curl -v Verbose Transcript =====
+
+----- 1. Successful create (expect 201 Created and Location header) -----
+$ curl -v -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-key-demo-5001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> POST /bookings HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> Content-Type: application/json
+> Idempotency-Key: agrirent-key-demo-5001
+> Content-Length: 104
+> 
+< HTTP/1.1 201 Created
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 99
+< Location: /bookings/1
+< Content-Type: application/json; charset=utf-8
+< Content-Length: 173
+< Date: Mon, 12 Oct 2026 15:40:01 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T15:40:01.100Z"
+}
+* Connection #0 to host localhost left intact
+
+----- 2. Same create repeated with same Idempotency-Key (returns original result without duplicate work) -----
+$ curl -v -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-key-demo-5001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> POST /bookings HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> Content-Type: application/json
+> Idempotency-Key: agrirent-key-demo-5001
+> Content-Length: 104
+> 
+< HTTP/1.1 201 Created
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 98
+< Location: /bookings/1
+< Content-Type: application/json; charset=utf-8
+< Content-Length: 173
+< Date: Mon, 12 Oct 2026 15:40:07 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T15:40:01.100Z"
+}
+* Connection #0 to host localhost left intact
+
+----- 3. Conditional GET with If-None-Match returning 304 Not Modified -----
+$ curl -v http://localhost:5001/bookings/1 \
+  -H 'If-None-Match: "c568d89e4776e01a403487f1"'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> GET /bookings/1 HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> If-None-Match: "c568d89e4776e01a403487f1"
+> 
+< HTTP/1.1 304 Not Modified
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 97
+< ETag: "c568d89e4776e01a403487f1"
+< Cache-Control: private, max-age=0, must-revalidate
+< Date: Mon, 12 Oct 2026 15:40:15 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+* Connection #0 to host localhost left intact
+
+----- 4. Conditional write rejected with 412 Precondition Failed -----
+$ curl -v -X PUT http://localhost:5001/bookings/1 \
+  -H "Authorization: Bearer agrirent-demo-token" \
+  -H 'If-Match: "stale-outdated-etag"' \
+  -H "Content-Type: application/json" \
+  --data '{"startDate":"2026-11-02","endDate":"2026-11-04"}'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> PUT /bookings/1 HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> Authorization: Bearer agrirent-demo-token
+> If-Match: "stale-outdated-etag"
+> Content-Type: application/json
+> Content-Length: 49
+> 
+< HTTP/1.1 412 Precondition Failed
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 96
+< Content-Type: application/problem+json; charset=utf-8
+< Content-Length: 172
+< Date: Mon, 12 Oct 2026 15:40:22 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "type": "about:blank",
+  "title": "Precondition Failed",
+  "status": 412,
+  "detail": "The booking changed since it was read. Fetch it again before updating."
+}
+* Connection #0 to host localhost left intact
+
+----- 5. Failure Path 1: 400 Bad Request (Malformed JSON syntax) -----
+$ curl -v -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-key-demo-5002" \
+  --data '{"equipmentId":'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> POST /bookings HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> Content-Type: application/json
+> Idempotency-Key: agrirent-key-demo-5002
+> Content-Length: 16
+> 
+< HTTP/1.1 400 Bad Request
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 95
+< Content-Type: application/problem+json; charset=utf-8
+< Content-Length: 128
+< Date: Mon, 12 Oct 2026 15:40:30 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "type": "about:blank",
+  "title": "Malformed JSON",
+  "status": 400,
+  "detail": "Request body must contain valid JSON."
+}
+* Connection #0 to host localhost left intact
+
+----- 6. Failure Path 2: 404 Not Found (Non-existent booking) -----
+$ curl -v http://localhost:5001/bookings/999999
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> GET /bookings/999999 HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> 
+< HTTP/1.1 404 Not Found
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 94
+< Content-Type: application/problem+json; charset=utf-8
+< Content-Length: 135
+< Date: Mon, 12 Oct 2026 15:40:38 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "type": "about:blank",
+  "title": "Booking not found",
+  "status": 404,
+  "detail": "No booking exists with id 999999."
+}
+* Connection #0 to host localhost left intact
+
+----- 7. Failure Path 3: 401 Unauthorized (Missing or invalid Bearer token) -----
+$ curl -v -X POST http://localhost:5001/bookings/1/cancellation \
+  -H "Content-Type: application/json" \
+  --data '{"reason":"Plans changed"}'
+
+*   Trying 127.0.0.1:5001...
+* Connected to localhost (127.0.0.1) port 5001 (#0)
+> POST /bookings/1/cancellation HTTP/1.1
+> Host: localhost:5001
+> User-Agent: curl/8.4.0
+> Accept: */*
+> Content-Type: application/json
+> Content-Length: 26
+> 
+< HTTP/1.1 401 Unauthorized
+< X-Content-Type-Options: nosniff
+< Strict-Transport-Security: max-age=31536000; includeSubDomains
+< Access-Control-Allow-Origin: *
+< Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+< Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+< Vary: Accept, Origin, Accept-Encoding
+< X-RateLimit-Limit: 100
+< X-RateLimit-Remaining: 93
+< Content-Type: application/problem+json; charset=utf-8
+< Content-Length: 147
+< Date: Mon, 12 Oct 2026 15:40:45 GMT
+< Connection: keep-alive
+< Keep-Alive: timeout=5
+< 
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Provide a valid Authorization: Bearer <token> header."
+}
+* Connection #0 to host localhost left intact

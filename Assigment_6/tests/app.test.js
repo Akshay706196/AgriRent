@@ -1,0 +1,19 @@
+'use strict';
+const request=require('supertest');
+const {createApp}=require('../app');
+const equipmentLookup=jest.fn(async id=>({id,available:true}));
+let app; const payload={equipmentId:'equipment-101',renterId:'renter-204',startDate:'2026-11-01',endDate:'2026-11-03'}; const key='assignment6-key-001'; const auth={Authorization:'Bearer agrirent-demo-token'};
+beforeEach(()=>{equipmentLookup.mockClear();app=createApp({equipmentLookup,rateLimit:100});});
+async function create(body=payload,k=key){return request(app).post('/bookings').set('Idempotency-Key',k).send(body);}
+test('valid create returns 201, Location and JSON body',async()=>{const r=await create();expect(r.status).toBe(201);expect(r.headers.location).toBe('/bookings/1');expect(r.headers['content-type']).toMatch(/application\/json.*charset=utf-8/);});
+test('same idempotency key replays original booking without repeated dependency call',async()=>{const a=await create();const b=await create();expect(b.status).toBe(201);expect(b.body).toEqual(a.body);expect(equipmentLookup).toHaveBeenCalledTimes(1);});
+test('validation reports multiple fields in one 422 Problem Details response',async()=>{const r=await create({equipmentId:'',renterId:'',startDate:'bad',endDate:'2026-01-01'},'assignment6-key-002');expect(r.status).toBe(422);expect(r.body.errors.length).toBeGreaterThanOrEqual(3);expect(r.headers['content-type']).toMatch(/application\/problem\+json.*charset=utf-8/);});
+test('empty cart analogue (missing booking body) returns field errors',async()=>{const r=await create({},'assignment6-key-003');expect(r.status).toBe(422);expect(r.body.errors.some(e=>e.field==='equipmentId')).toBe(true);});
+test('unknown booking returns 404 Problem Details',async()=>{const r=await request(app).get('/bookings/999');expect(r.status).toBe(404);expect(r.body.type).toContain('booking-not-found');});
+test('GET ETag conditional read returns 304 with no body',async()=>{const made=await create();const first=await request(app).get(`/bookings/${made.body.id}`);const second=await request(app).get(`/bookings/${made.body.id}`).set('If-None-Match',first.headers.etag);expect(first.status).toBe(200);expect(second.status).toBe(304);expect(second.text).toBeFalsy();});
+test('stale If-Match returns 412',async()=>{const made=await create();const r=await request(app).put(`/bookings/${made.body.id}`).set(auth).set('If-Match','"stale"').send({...payload,startDate:'2026-11-02'});expect(r.status).toBe(412);});
+test('missing token returns 401',async()=>{const r=await request(app).put('/bookings/1').send(payload);expect(r.status).toBe(401);expect(r.body.status).toBe(401);});
+test('Accept XML returns XML representation',async()=>{const made=await create();const r=await request(app).get(`/bookings/${made.body.id}`).set('Accept','application/xml');expect(r.status).toBe(200);expect(r.headers['content-type']).toMatch(/application\/xml/);expect(r.text).toContain('<equipmentId>equipment-101</equipmentId>');});
+test('unsupported Accept returns 406',async()=>{const r=await request(app).get('/bookings').set('Accept','text/html');expect(r.status).toBe(406);});
+test('state conflict cancellation returns 409 on repeated cancellation',async()=>{const made=await create();await request(app).post(`/bookings/${made.body.id}/cancellation`).set(auth).send({reason:'changed plans'});const r=await request(app).post(`/bookings/${made.body.id}/cancellation`).set(auth).send({reason:'changed plans'});expect(r.status).toBe(409);expect(r.body.type).toContain('illegal-transition');});
+test('rate limit includes Retry-After and Problem Details',async()=>{const limited=createApp({equipmentLookup,rateLimit:1});await request(limited).get('/health');const r=await request(limited).get('/health');expect(r.status).toBe(429);expect(r.headers['retry-after']).toBeDefined();expect(r.body.status).toBe(429);});

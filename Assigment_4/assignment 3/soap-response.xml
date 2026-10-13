@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:esc="http://escrow.agripay.bank.in/ws/escrow">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <esc:AuthorizeEscrowHoldResponse>
+      <esc:EscrowTransactionId>ESC-TXN-20261011-884920</esc:EscrowTransactionId>
+      <esc:HoldStatus>HELD_AUTHORIZED</esc:HoldStatus>
+      <esc:TotalHeldAmount>12500.00</esc:TotalHeldAmount>
+      <esc:HoldExpiresAt>2026-10-18T23:59:59Z</esc:HoldExpiresAt>
+    </esc:AuthorizeEscrowHoldResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

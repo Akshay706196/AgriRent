@@ -1,0 +1,238 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Booking Service — Assignment 6
+  version: 1.0.0
+  description: Booking REST API with honest status codes, RFC 7807 Problem Details, field validation, and JSON/XML content negotiation.
+servers:
+  - url: http://localhost:5001
+    description: Local development server
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: agrirent-booking-service }
+            application/xml:
+              schema: { type: string }
+        '406': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /bookings:
+    get:
+      summary: List bookings with filtering, sorting and pagination
+      parameters:
+        - { in: query, name: status, schema: { type: string, enum: [PENDING_OWNER_APPROVAL, CANCELLED_BY_RENTER] } }
+        - { in: query, name: sort, schema: { type: string, enum: [createdAt, startDate, endDate, id], default: createdAt } }
+        - { in: query, name: order, schema: { type: string, enum: [asc, desc], default: asc } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Booking list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingList' }
+            application/xml:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Problem' }
+        '406': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+    post:
+      summary: Create a booking request
+      parameters:
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 8, maxLength: 200 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBooking' }
+      responses:
+        '201':
+          description: Created or original booking returned for repeat key
+          headers:
+            Location:
+              schema: { type: string }
+              description: URI of newly created booking
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+            application/xml:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Problem' }
+        '406': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+        '503': { $ref: '#/components/responses/Problem' }
+  /bookings/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    options:
+      summary: Discover allowed methods for single booking
+      responses:
+        '204':
+          description: Allowed methods returned in Allow header
+          headers:
+            Allow:
+              schema: { type: string, example: 'GET, PUT, DELETE, OPTIONS' }
+    get:
+      summary: Read one booking with conditional caching
+      parameters:
+        - { in: header, name: If-None-Match, schema: { type: string } }
+      responses:
+        '200':
+          description: Booking representation
+          headers:
+            ETag: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+            application/xml:
+              schema: { type: string }
+        '304':
+          description: Not modified; client cache is fresh
+        '404': { $ref: '#/components/responses/Problem' }
+        '406': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+    put:
+      summary: Update a pending booking
+      security:
+        - DemoBearer: []
+      parameters:
+        - { in: header, name: If-Match, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateBooking' }
+      responses:
+        '200':
+          description: Updated booking
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '412': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '428': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+    delete:
+      summary: Direct deletion attempt (refused by design)
+      security:
+        - DemoBearer: []
+      responses:
+        '401': { $ref: '#/components/responses/Problem' }
+        '405':
+          description: Method Not Allowed; cancellation sub-resource must be used
+          headers:
+            Allow:
+              schema: { type: string, example: 'GET, PUT, OPTIONS' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /bookings/{id}/cancellation:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      summary: Request booking cancellation
+      security:
+        - DemoBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Cancellation' }
+      responses:
+        '200':
+          description: Cancellation accepted
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    DemoBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: demo-token
+  schemas:
+    CreateBooking:
+      type: object
+      required: [equipmentId, renterId, startDate, endDate]
+      properties:
+        equipmentId: { type: string, minLength: 1, example: equipment-101 }
+        renterId: { type: string, minLength: 1, example: renter-204 }
+        startDate: { type: string, format: date, example: '2026-11-01' }
+        endDate: { type: string, format: date, example: '2026-11-03' }
+    UpdateBooking:
+      type: object
+      required: [startDate, endDate]
+      properties:
+        equipmentId: { type: string, minLength: 1, example: equipment-101 }
+        startDate: { type: string, format: date, example: '2026-11-02' }
+        endDate: { type: string, format: date, example: '2026-11-04' }
+    Cancellation:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, example: Seasonal rainfall delayed sowing }
+    Booking:
+      type: object
+      required: [id, equipmentId, renterId, startDate, endDate, status, createdAt]
+      properties:
+        id: { type: string, example: '1' }
+        equipmentId: { type: string, example: equipment-101 }
+        renterId: { type: string, example: renter-204 }
+        startDate: { type: string, format: date, example: '2026-11-01' }
+        endDate: { type: string, format: date, example: '2026-11-03' }
+        status: { type: string, example: PENDING_OWNER_APPROVAL }
+        createdAt: { type: string, format: date-time, example: '2026-10-12T14:10:05.120Z' }
+    BookingList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Booking' }
+        total: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        offset: { type: integer, example: 0 }
+    ValidationErrorItem:
+      type: object
+      required: [field, reason]
+      properties:
+        field: { type: string, example: equipmentId }
+        reason: { type: string, example: is required and must be a non-empty string }
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, example: https://agrirent.example/problems/validation-error }
+        title: { type: string, example: Request validation failed }
+        status: { type: integer, example: 422 }
+        detail: { type: string, example: One or more booking fields are invalid. }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/ValidationErrorItem' }
+  responses:
+    Problem:
+      description: RFC 7807 Problem Details error response
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }

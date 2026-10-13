@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Booking Service API
+  version: 1.0.0
+  description: REST contract for booking requests. A new booking remains pending until the equipment owner approves it; payment is a later step.
+servers:
+  - url: http://localhost:5001
+    description: Local development server
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Check service health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /bookings:
+    post:
+      operationId: createBooking
+      summary: Create a booking request
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+      responses:
+        '201':
+          description: Booking created or original result returned for a repeated idempotency key
+          headers:
+            Location:
+              description: URI of the created booking
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400':
+          description: Invalid header or malformed request
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Equipment does not exist or is unavailable
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: Equipment service could not be reached after retries
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    get:
+      operationId: listBookings
+      summary: List bookings, optionally filtered by status
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING_OWNER_APPROVAL, CANCELLED_BY_RENTER]
+      responses:
+        '200':
+          description: Matching bookings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingList' }
+        '400':
+          description: Unsupported status filter
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /bookings/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getBooking
+      summary: Read one booking
+      responses:
+        '200':
+          description: Booking found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '404':
+          description: Booking does not exist
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /bookings/{id}/cancellation:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: cancelBooking
+      summary: Cancel a pending booking request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelBookingRequest' }
+      responses:
+        '200':
+          description: Booking cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CancellationResult' }
+        '400':
+          description: Missing cancellation reason or malformed JSON
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: Booking does not exist
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Booking is not in a cancellable state
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Reuse the same key when retrying the same create request.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+  schemas:
+    CreateBookingRequest:
+      type: object
+      required: [equipmentId, renterId, startDate, endDate]
+      properties:
+        equipmentId: { type: string, minLength: 1, example: equipment-101 }
+        renterId: { type: string, minLength: 1, example: renter-204 }
+        startDate: { type: string, format: date, example: '2026-11-01' }
+        endDate: { type: string, format: date, example: '2026-11-03' }
+    Booking:
+      type: object
+      required: [id, equipmentId, renterId, startDate, endDate, status, createdAt]
+      properties:
+        id: { type: string, example: '1' }
+        equipmentId: { type: string }
+        renterId: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        status:
+          type: string
+          enum: [PENDING_OWNER_APPROVAL, CANCELLED_BY_RENTER]
+        createdAt: { type: string, format: date-time }
+    BookingList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Booking' }
+    CancelBookingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, example: Change of plans }
+    CancellationResult:
+      type: object
+      required: [booking, cancellation]
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        cancellation:
+          type: object
+          required: [reason]
+          properties:
+            reason: { type: string }
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string, example: about:blank }
+        title: { type: string, example: Booking not found }
+        status: { type: integer, example: 404 }
+        detail: { type: string, example: No booking exists with id 999. }
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status: { type: string, example: ok }
+        service: { type: string, example: agrirent-booking-service }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:esc="http://escrow.agripay.bank.in/ws/escrow">
+  <soapenv:Body>
+    <soapenv:Fault>
+      <faultcode>soapenv:Client</faultcode>
+      <faultstring>Escrow authorization failed: Payer instrument has insufficient credit limit</faultstring>
+      <detail>
+        <esc:EscrowFaultDetail>
+          <esc:PartnerErrorCode>BANK_INSUFFICIENT_FUNDS</esc:PartnerErrorCode>
+          <esc:ErrorDescription>The requested escrow amount INR 12500.00 exceeds payer account limit</esc:ErrorDescription>
+        </esc:EscrowFaultDetail>
+      </detail>
+    </soapenv:Fault>
+  </soapenv:Body>
+</soapenv:Envelope>

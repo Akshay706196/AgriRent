@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Booking Service API
+  version: 1.1.0
+  description: Assignment 5 update with HTTP methods, headers, caching, conditional writes, authorization and retry safety.
+servers:
+  - url: http://localhost:5001
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      responses:
+        '200': { description: Healthy }
+  /bookings:
+    get:
+      operationId: listBookings
+      summary: Filter, sort and paginate booking requests
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [PENDING_OWNER_APPROVAL, CANCELLED_BY_RENTER] } }
+        - { name: sort, in: query, required: false, schema: { type: string, enum: [createdAt, startDate, endDate, id], default: createdAt } }
+        - { name: order, in: query, required: false, schema: { type: string, enum: [asc, desc], default: asc } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Filtered list, content: { application/json: { schema: { $ref: '#/components/schemas/BookingList' } } } }
+        '400': { $ref: '#/components/responses/Problem400' }
+        '406': { $ref: '#/components/responses/Problem406' }
+        '429': { $ref: '#/components/responses/Problem429' }
+    post:
+      operationId: createBooking
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateBookingRequest' } } }
+      responses:
+        '201':
+          description: Created or original idempotent result
+          headers: { Location: { description: URI of booking, schema: { type: string } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } }
+        '400': { $ref: '#/components/responses/Problem400' }
+        '406': { $ref: '#/components/responses/Problem406' }
+        '422': { $ref: '#/components/responses/Problem422' }
+        '429': { $ref: '#/components/responses/Problem429' }
+        '503': { $ref: '#/components/responses/Problem503' }
+  /bookings/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    options:
+      operationId: bookingOptions
+      responses: { '204': { description: Allowed methods; Allow header returned } }
+    get:
+      operationId: getBooking
+      parameters:
+        - { name: If-None-Match, in: header, required: false, schema: { type: string }, description: Return 304 if the representation is unchanged. }
+      responses:
+        '200':
+          description: Booking representation
+          headers:
+            ETag: { schema: { type: string }, description: Representation validator }
+            Cache-Control: { schema: { type: string } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } }
+        '304': { description: Not modified; no response body }
+        '404': { $ref: '#/components/responses/Problem404' }
+        '406': { $ref: '#/components/responses/Problem406' }
+    put:
+      operationId: updateBooking
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: If-Match, in: header, required: true, schema: { type: string }, description: Current ETag required to prevent lost updates. }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateBookingRequest' } } }
+      responses:
+        '200': { description: Updated booking, content: { application/json: { schema: { $ref: '#/components/schemas/Booking' } } } }
+        '401': { $ref: '#/components/responses/Problem401' }
+        '404': { $ref: '#/components/responses/Problem404' }
+        '412': { $ref: '#/components/responses/Problem412' }
+        '428': { description: If-Match missing, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '409': { $ref: '#/components/responses/Problem409' }
+        '400': { $ref: '#/components/responses/Problem400' }
+    delete:
+      operationId: deleteBookingNotSupported
+      summary: Deletion is intentionally not allowed; use cancellation workflow
+      security: [{ BearerAuth: [] }]
+      responses:
+        '405': { description: 'Use POST /bookings/{id}/cancellation' }
+  /bookings/{id}/cancellation:
+    post:
+      operationId: cancelBooking
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CancelBookingRequest' } } }
+      responses:
+        '200': { description: Cancellation requested, content: { application/json: { schema: { $ref: '#/components/schemas/CancellationResult' } } } }
+        '400': { $ref: '#/components/responses/Problem400' }
+        '401': { $ref: '#/components/responses/Problem401' }
+        '404': { $ref: '#/components/responses/Problem404' }
+        '409': { $ref: '#/components/responses/Problem409' }
+components:
+  securitySchemes:
+    BearerAuth: { type: http, scheme: bearer }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 200 }
+  responses:
+    Problem400: { description: Bad request, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem401: { description: Missing or invalid bearer token, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem404: { description: Resource not found, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem406: { description: Unsupported response media type, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem409: { description: State conflict, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem412: { description: ETag precondition failed, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem422: { description: Domain rejected request, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem429: { description: Rate limit exceeded, headers: { Retry-After: { schema: { type: string } } }, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Problem503: { description: Equipment service unavailable, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  schemas:
+    CreateBookingRequest:
+      type: object
+      required: [equipmentId, renterId, startDate, endDate]
+      properties:
+        equipmentId: { type: string, minLength: 1 }
+        renterId: { type: string, minLength: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    UpdateBookingRequest:
+      type: object
+      required: [startDate, endDate]
+      properties:
+        equipmentId: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+    Booking:
+      type: object
+      required: [id, equipmentId, renterId, startDate, endDate, status, createdAt]
+      properties:
+        id: { type: string }
+        equipmentId: { type: string }
+        renterId: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        status: { type: string, enum: [PENDING_OWNER_APPROVAL, CANCELLED_BY_RENTER] }
+        createdAt: { type: string, format: date-time }
+    BookingList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Booking' } }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+    CancelBookingRequest:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 1 } }
+    CancellationResult:
+      type: object
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        cancellation: { type: object, properties: { reason: { type: string } } }
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }

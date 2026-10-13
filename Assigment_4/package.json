@@ -1,0 +1,25 @@
+{
+  "name": "agrirent-assignment-4-booking-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CS543 Assignment 4 adapted to AgriRent: REST Booking Service with OpenAPI, idempotency, dependency resilience and tests",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "jest --runInBand",
+    "validate:openapi": "swagger-cli validate openapi.yaml",
+    "mock-equipment": "node mock-equipment-service.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0",
+    "swagger-cli": "^4.0.4"
+  }
+}

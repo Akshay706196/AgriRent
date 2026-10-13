@@ -1,0 +1,278 @@
+===== AgriRent Assignment 6: curl -i Transcript =====
+
+----- 1. Successful Create (201 Created + Location + UTF-8 JSON) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: assignment6-key-demo-001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+HTTP/1.1 201 Created
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 99
+Location: /bookings/1
+Content-Type: application/json; charset=utf-8
+Content-Length: 173
+Date: Mon, 12 Oct 2026 16:20:01 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T16:20:01.210Z"
+}
+
+----- 2. Idempotent Replay with Same Key (returns original without duplicate work) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: assignment6-key-demo-001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+HTTP/1.1 201 Created
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 98
+Location: /bookings/1
+Content-Type: application/json; charset=utf-8
+Content-Length: 173
+Date: Mon, 12 Oct 2026 16:20:06 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T16:20:01.210Z"
+}
+
+----- 3. Multi-Field Validation Failure (422 Problem Details with errors[]) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: assignment6-key-demo-002" \
+  --data '{"equipmentId":"","renterId":"","startDate":"not-a-date","endDate":"2025-01-01"}'
+
+HTTP/1.1 422 Unprocessable Entity
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 97
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 420
+Date: Mon, 12 Oct 2026 16:20:12 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "https://agrirent.example/problems/validation-error",
+  "title": "Request validation failed",
+  "status": 422,
+  "detail": "One or more booking fields are invalid.",
+  "errors": [
+    {
+      "field": "equipmentId",
+      "reason": "is required and must be a non-empty string"
+    },
+    {
+      "field": "renterId",
+      "reason": "is required and must be a non-empty string"
+    },
+    {
+      "field": "startDate",
+      "reason": "must use YYYY-MM-DD format"
+    }
+  ]
+}
+
+----- 4. Content Negotiation: Accept application/xml (XML representation) -----
+$ curl -i http://localhost:5001/bookings/1 \
+  -H "Accept: application/xml"
+
+HTTP/1.1 200 OK
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 96
+ETag: "8f71d3a019e5be6021ca394f"
+Cache-Control: private, max-age=0, must-revalidate
+Content-Type: application/xml; charset=utf-8
+Content-Length: 265
+Date: Mon, 12 Oct 2026 16:20:18 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+<response><id>1</id><equipmentId>equipment-101</equipmentId><renterId>renter-204</renterId><startDate>2026-11-01</startDate><endDate>2026-11-03</endDate><status>PENDING_OWNER_APPROVAL</status><createdAt>2026-10-12T16:20:01.210Z</createdAt></response>
+
+----- 5. Content Negotiation: Unsupported Accept text/html (406 Not Acceptable) -----
+$ curl -i http://localhost:5001/bookings \
+  -H "Accept: text/html"
+
+HTTP/1.1 406 Not Acceptable
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 198
+Date: Mon, 12 Oct 2026 16:20:25 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "https://agrirent.example/problems/not-acceptable",
+  "title": "Not Acceptable",
+  "status": 406,
+  "detail": "Supported representations are application/json and application/xml."
+}
+
+----- 6. Conditional GET with Matching ETag (304 Not Modified) -----
+$ curl -i http://localhost:5001/bookings/1 \
+  -H 'If-None-Match: "8f71d3a019e5be6021ca394f"'
+
+HTTP/1.1 304 Not Modified
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 94
+ETag: "8f71d3a019e5be6021ca394f"
+Cache-Control: private, max-age=0, must-revalidate
+Date: Mon, 12 Oct 2026 16:20:31 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+----- 7. Conditional Update with Stale ETag (412 Precondition Failed) -----
+$ curl -i -X PUT http://localhost:5001/bookings/1 \
+  -H "Authorization: Bearer agrirent-demo-token" \
+  -H 'If-Match: "outdated-stale-tag"' \
+  -H "Content-Type: application/json" \
+  --data '{"startDate":"2026-11-02","endDate":"2026-11-04"}'
+
+HTTP/1.1 412 Precondition Failed
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 93
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 215
+Date: Mon, 12 Oct 2026 16:20:38 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "https://agrirent.example/problems/precondition-failed",
+  "title": "Precondition Failed",
+  "status": 412,
+  "detail": "The booking changed since it was read. Fetch it again before updating."
+}
+
+----- 8. Protected Update Missing Bearer Token (401 Unauthorized) -----
+$ curl -i -X PUT http://localhost:5001/bookings/1 \
+  -H "Content-Type: application/json" \
+  --data '{"startDate":"2026-11-02","endDate":"2026-11-04"}'
+
+HTTP/1.1 401 Unauthorized
+X-Content-Type-Options: nosniff
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept, Authorization, Idempotency-Key, If-None-Match, If-Match, X-HTTP-Method-Override
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Vary: Accept, Origin, Accept-Encoding
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 92
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 178
+Date: Mon, 12 Oct 2026 16:20:44 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "https://agrirent.example/problems/unauthorized",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Provide a valid Authorization: Bearer <token> header."
+}
+
+----- 9. Duplicate Cancellation (409 Conflict Problem Details) -----
+$ curl -i -X POST http://localhost:5001/bookings/1/cancellation \
+  -H "Authorization: Bearer agrirent-demo-token" \
+  -H "Content-Type: application/json" \
+  --data '{"reason":"Seasonal rainfall delayed sowing"}'
+
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Content-Length: 236
+Date: Mon, 12 Oct 2026 16:20:50 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "booking": {
+    "id": "1",
+    "equipmentId": "equipment-101",
+    "renterId": "renter-204",
+    "startDate": "2026-11-01",
+    "endDate": "2026-11-03",
+    "status": "CANCELLED_BY_RENTER",
+    "createdAt": "2026-10-12T16:20:01.210Z"
+  },
+  "cancellation": {
+    "reason": "Seasonal rainfall delayed sowing"
+  }
+}
+
+$ curl -i -X POST http://localhost:5001/bookings/1/cancellation \
+  -H "Authorization: Bearer agrirent-demo-token" \
+  -H "Content-Type: application/json" \
+  --data '{"reason":"Seasonal rainfall delayed sowing"}'
+
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 218
+Date: Mon, 12 Oct 2026 16:20:56 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "https://agrirent.example/problems/illegal-transition",
+  "title": "Illegal booking transition",
+  "status": 409,
+  "detail": "A booking in CANCELLED_BY_RENTER state cannot be cancelled by this operation."
+}

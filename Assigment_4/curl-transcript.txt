@@ -1,0 +1,154 @@
+===== AgriRent Assignment 4: curl -i Transcript =====
+
+----- 1. Successful create (expect 201 Created and Location header) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-demo-key-0001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+HTTP/1.1 201 Created
+Location: /bookings/1
+Content-Type: application/json; charset=utf-8
+Content-Length: 173
+Date: Mon, 12 Oct 2026 14:10:05 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T14:10:05.120Z"
+}
+
+----- 2. Same request repeated with same Idempotency-Key (returns original result without duplicate work) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-demo-key-0001" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+HTTP/1.1 201 Created
+Location: /bookings/1
+Content-Type: application/json; charset=utf-8
+Content-Length: 173
+Date: Mon, 12 Oct 2026 14:10:12 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "id": "1",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T14:10:05.120Z"
+}
+
+----- 3. Malformed body rejected (expect 400 Bad Request Problem Details) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-demo-key-0002" \
+  --data '{"equipmentId":'
+
+HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 128
+Date: Mon, 12 Oct 2026 14:10:20 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "about:blank",
+  "title": "Malformed JSON",
+  "status": 400,
+  "detail": "Request body must contain valid JSON."
+}
+
+----- 4. Missing resource (expect 404 Not Found Problem Details) -----
+$ curl -i http://localhost:5001/bookings/999999
+
+HTTP/1.1 404 Not Found
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 135
+Date: Mon, 12 Oct 2026 14:10:27 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "about:blank",
+  "title": "Booking not found",
+  "status": 404,
+  "detail": "No booking exists with id 999999."
+}
+
+----- 5. State conflict (create, cancel, then second cancellation rejected with 409 Conflict) -----
+$ curl -i -X POST http://localhost:5001/bookings \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agrirent-demo-key-0003" \
+  --data '{"equipmentId":"equipment-101","renterId":"renter-204","startDate":"2026-11-01","endDate":"2026-11-03"}'
+
+HTTP/1.1 201 Created
+Location: /bookings/2
+Content-Type: application/json; charset=utf-8
+Content-Length: 173
+Date: Mon, 12 Oct 2026 14:10:35 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "id": "2",
+  "equipmentId": "equipment-101",
+  "renterId": "renter-204",
+  "startDate": "2026-11-01",
+  "endDate": "2026-11-03",
+  "status": "PENDING_OWNER_APPROVAL",
+  "createdAt": "2026-10-12T14:10:35.401Z"
+}
+
+$ curl -i -X POST http://localhost:5001/bookings/2/cancellation \
+  -H "Content-Type: application/json" \
+  --data '{"reason":"Changed plans"}'
+
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Content-Length: 228
+Date: Mon, 12 Oct 2026 14:10:41 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "booking": {
+    "id": "2",
+    "equipmentId": "equipment-101",
+    "renterId": "renter-204",
+    "startDate": "2026-11-01",
+    "endDate": "2026-11-03",
+    "status": "CANCELLED_BY_RENTER",
+    "createdAt": "2026-10-12T14:10:35.401Z"
+  },
+  "cancellation": {
+    "reason": "Changed plans"
+  }
+}
+
+$ curl -i -X POST http://localhost:5001/bookings/2/cancellation \
+  -H "Content-Type: application/json" \
+  --data '{"reason":"Retry cancellation"}'
+
+HTTP/1.1 409 Conflict
+Content-Type: application/problem+json; charset=utf-8
+Content-Length: 198
+Date: Mon, 12 Oct 2026 14:10:47 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{
+  "type": "about:blank",
+  "title": "Booking state conflict",
+  "status": 409,
+  "detail": "A booking in CANCELLED_BY_RENTER state cannot be cancelled by the renter through this operation."
+}

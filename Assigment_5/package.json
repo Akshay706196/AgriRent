@@ -1,0 +1,16 @@
+{
+  "name": "agrirent-assignment-5-http-methods-headers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CS543 Assignment 5 extension of AgriRent Assignment 4 Booking REST service",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "jest --runInBand",
+    "validate:openapi": "swagger-cli validate openapi.yaml",
+    "mock-equipment": "node mock-equipment-service.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "compression": "^1.7.4", "express": "^4.21.2", "yaml": "^2.7.0" },
+  "devDependencies": { "jest": "^29.7.0", "supertest": "^7.0.0", "swagger-cli": "^4.0.4" }
+}

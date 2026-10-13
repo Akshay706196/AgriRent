@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:esc="http://escrow.agripay.bank.in/ws/escrow">
+  <soapenv:Header>
+    <esc:PartnerAuthHeader>
+      <esc:MerchantId>AGRIRENT_PROD_9981</esc:MerchantId>
+      <esc:ApiKey>sec_live_9f8d7c6b5a4e3d2c1b0a</esc:ApiKey>
+    </esc:PartnerAuthHeader>
+  </soapenv:Header>
+  <soapenv:Body>
+    <esc:AuthorizeEscrowHoldRequest>
+      <esc:BookingReference>BK-2026-90412</esc:BookingReference>
+      <esc:PayerVpaOrToken>renter_tok_88231a47</esc:PayerVpaOrToken>
+      <esc:RentalFeeAmount>7500.00</esc:RentalFeeAmount>
+      <esc:SecurityDepositAmount>5000.00</esc:SecurityDepositAmount>
+      <esc:Currency>INR</esc:Currency>
+    </esc:AuthorizeEscrowHoldRequest>
+  </soapenv:Body>
+</soapenv:Envelope>
