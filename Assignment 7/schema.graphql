@@ -1,0 +1,26 @@
+type Equipment {
+  id: ID!
+  name: String!
+  category: String!
+  daily_rate: Float!
+  is_available: Boolean!
+}
+
+input AddEquipmentInput {
+  name: String!
+  category: String!
+  daily_rate: Float!
+  is_available: Boolean = true
+}
+
+type Query {
+  # List all equipments or filter available ones
+  equipments(onlyAvailable: Boolean): [Equipment!]!
+  # Get single machinery by ID
+  equipment(id: ID!): Equipment
+}
+
+type Mutation {
+  # Add a new equipment to AgriRent catalogue
+  addEquipment(input: AddEquipmentInput!): Equipment!
+}
