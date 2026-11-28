@@ -1,0 +1,766 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Payment & Security Deposit Service
+  version: 1.0.0
+  description: |
+    AgriRent Microservice 4: Collects rental charges and security deposits via payment gateways,
+    manages escrow security deposit holds, executes partial and full refunds, and performs final
+    settlement calculations according to the documented platform financial formula.
+servers:
+  - url: http://localhost:4004
+    description: Local Development Server
+
+paths:
+  /v1/payments:
+    post:
+      summary: Initiate Payment
+      description: |
+        Initiates payment order for an APPROVED booking. Validates caller is the booking renter,
+        verifies payment deadline has not passed, and strictly recomputes all monetary amounts
+        from the Booking snapshot.
+      operationId: initiatePayment
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/CorrelationIdHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiatePaymentRequest'
+      responses:
+        '201':
+          description: Payment initiated successfully
+          headers:
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimit-Limit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimit-Remaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimit-Reset'
+            x-correlation-id:
+              $ref: '#/components/headers/x-correlation-id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InitiatePaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+        '429':
+          $ref: '#/components/responses/TooManyRequestsError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeoutError'
+
+    get:
+      summary: List Payments
+      description: Lists payments with stable cursor pagination and Link header.
+      operationId: listPayments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated payments list
+          headers:
+            Link:
+              schema:
+                type: string
+              description: Next cursor link for stable pagination
+            Cache-Control:
+              schema:
+                type: string
+                example: private, no-cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPaymentsResponse'
+
+  /v1/payments/{paymentId}:
+    get:
+      summary: Get Payment Details
+      description: Retrieves payment details. Supports ETag conditional validation (304) and JSON/XML content negotiation.
+      operationId: getPayment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfNoneMatchHeader'
+      responses:
+        '200':
+          description: Payment details
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Cache-Control:
+              schema:
+                type: string
+                example: private, no-cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '304':
+          description: Not Modified (cached entity matches ETag)
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '406':
+          $ref: '#/components/responses/NotAcceptableError'
+
+  /v1/payments/{paymentId}/verifications:
+    post:
+      summary: Verify Payment
+      description: Verifies gateway payment result. Transitions payment to CONFIRMED and holds deposit atomically.
+      operationId: verifyPayment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gatewayTransactionReference:
+                  type: string
+                gatewayOrderId:
+                  type: string
+                signature:
+                  type: string
+      responses:
+        '200':
+          description: Payment verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyPaymentResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+
+  /v1/webhooks/gateway:
+    post:
+      summary: Gateway Webhook Receiver
+      description: Receives asynchronous webhook events from payment gateway with HMAC-SHA256 signature verification.
+      operationId: handleGatewayWebhook
+      parameters:
+        - name: x-razorpay-signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook received and processed
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /v1/bookings/{bookingId}/payment-status:
+    get:
+      summary: Get Payment Status for Booking
+      description: Used by Handover Service to verify payment and deposit clearance prior to machinery handover.
+      operationId: getPaymentStatus
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment status details
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=0, must-revalidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '406':
+          $ref: '#/components/responses/NotAcceptableError'
+
+  /v1/bookings/{bookingId}/deposit-holds:
+    post:
+      summary: Hold Security Deposit
+      description: Holds security deposit in escrow for an approved, paid booking.
+      operationId: holdSecurityDeposit
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                depositAmount:
+                  type: number
+                paymentReference:
+                  type: string
+      responses:
+        '201':
+          description: Deposit held in escrow
+        '409':
+          description: Deposit already held
+        '422':
+          description: Deposit failed
+
+  /v1/payments/{paymentId}/refunds:
+    post:
+      summary: Refund Payment
+      description: Issues partial or full refund against a CONFIRMED payment.
+      operationId: refundPayment
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                  exclusiveMinimum: 0
+                reason:
+                  type: string
+      responses:
+        '201':
+          description: Refund processed successfully
+        '409':
+          description: Duplicate refund request
+        '422':
+          description: Refund not allowed or amount exceeds remainder
+
+  /v1/bookings/{bookingId}/settlements:
+    post:
+      summary: Settle Completed Booking
+      description: |
+        Executes final financial settlement for a completed machinery return.
+        **Settlement Formula**:
+        - `depositBalance = heldDeposit - lateFine - damageDeduction`
+        - `refundToRenter = depositBalance - disputedAmount`
+        - `ownerPayout = rentalAmount + lateFine + damageDeduction`
+        - Platform fee is retained by AgriRent platform and is NOT paid out to equipment owner.
+        - `lateFine + damageDeduction` must not exceed `heldDeposit` (otherwise 422 INVALID_DEDUCTION).
+      operationId: settlePayment
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementRequest'
+      responses:
+        '201':
+          description: Settlement completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+        '409':
+          description: Settlement already completed for this booking
+        '422':
+          description: Invalid deduction or booking not in eligible state
+
+  /v1/bookings/{bookingId}/settlements/{settlementId}:
+    get:
+      summary: Get Settlement Details
+      description: Retrieves settlement record with ETag and XML/JSON content negotiation support.
+      operationId: getSettlement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: settlementId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfNoneMatchHeader'
+      responses:
+        '200':
+          description: Settlement details
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+        '304':
+          description: Not Modified
+
+  /v1/payments/{paymentId}/events:
+    get:
+      summary: Get Payment Audit Events
+      description: Retrieves cursor-paginated state transitions and audit logs from NoSQL document store.
+      operationId: getPaymentEvents
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated audit event log
+
+  /v1/settlements/booking/{bookingId}/deductions:
+    get:
+      summary: Get Approved Deductions (Claims Contract)
+      description: Retrieves adjuster approved deductions from Claims Service.
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of approved deductions
+
+  /health:
+    get:
+      summary: Liveness Probe
+      responses:
+        '200':
+          description: Service is healthy
+
+  /ready:
+    get:
+      summary: Readiness Probe
+      responses:
+        '200':
+          description: All dependencies ready
+        '503':
+          description: Service dependencies not ready
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalServiceToken:
+      type: apiKey
+      in: header
+      name: internal_service_token
+
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        example: idemp-550e8400-e29b-41d4-a716-446655440000
+    IfNoneMatchHeader:
+      name: If-None-Match
+      in: header
+      schema:
+        type: string
+        example: '"c56a41801e2c42a8c36ad532e23117ad"'
+    CorrelationIdHeader:
+      name: x-correlation-id
+      in: header
+      schema:
+        type: string
+        example: req-12345
+
+  headers:
+    ETag:
+      schema:
+        type: string
+      description: Entity tag for conditional validation
+    RateLimit-Limit:
+      schema:
+        type: integer
+    RateLimit-Remaining:
+      schema:
+        type: integer
+    RateLimit-Reset:
+      schema:
+        type: integer
+    Retry-After:
+      schema:
+        type: integer
+    x-correlation-id:
+      schema:
+        type: string
+
+  schemas:
+    InitiatePaymentRequest:
+      type: object
+      required: [bookingId]
+      properties:
+        bookingId:
+          type: string
+          example: BK-1A2B3C4D
+        renterId:
+          type: string
+          example: USR-RENTER01
+        rentalAmount:
+          type: number
+          example: 3000.00
+        deposit:
+          type: number
+          example: 500.00
+        currency:
+          type: string
+          default: INR
+
+    InitiatePaymentResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          example: PAY-5E6F7A8B
+        bookingId:
+          type: string
+          example: BK-1A2B3C4D
+        status:
+          type: string
+          example: PENDING_VERIFICATION
+        gatewayStatus:
+          type: string
+          example: CREATED
+        gatewayOrderId:
+          type: string
+          example: order_sim_12345
+        totalAmount:
+          type: number
+          example: 3800.00
+        rentalAmount:
+          type: number
+          example: 3000.00
+        platformFee:
+          type: number
+          example: 300.00
+        securityDeposit:
+          type: number
+          example: 500.00
+        currency:
+          type: string
+          example: INR
+
+    VerifyPaymentResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: CONFIRMED
+        paymentId:
+          type: string
+          example: PAY-5E6F7A8B
+        bookingId:
+          type: string
+          example: BK-1A2B3C4D
+        transactionReference:
+          type: string
+          example: TXN-9F8E7D6C
+        depositId:
+          type: string
+          example: DEP-3B4C5D6E
+        depositStatus:
+          type: string
+          example: HELD
+
+    PaymentStatusResponse:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        paymentId:
+          type: string
+        paymentStatus:
+          type: string
+        depositStatus:
+          type: string
+        paid:
+          type: boolean
+        totalAmount:
+          type: number
+        heldDeposit:
+          type: number
+        currency:
+          type: string
+
+    SettlementRequest:
+      type: object
+      properties:
+        rentalAmount:
+          type: number
+          example: 3000.00
+        lateFine:
+          type: number
+          example: 100.00
+        damageDeduction:
+          type: number
+          example: 200.00
+        disputedAmount:
+          type: number
+          example: 0
+
+    SettlementResponse:
+      type: object
+      properties:
+        settlementId:
+          type: string
+          example: SET-1A2B3C4D
+        bookingId:
+          type: string
+          example: BK-1A2B3C4D
+        rentalAmount:
+          type: number
+          example: 3000.00
+        platformFee:
+          type: number
+          example: 300.00
+        heldDeposit:
+          type: number
+          example: 500.00
+        lateFine:
+          type: number
+          example: 100.00
+        damageDeduction:
+          type: number
+          example: 200.00
+        depositBalance:
+          type: number
+          example: 200.00
+        refundToRenter:
+          type: number
+          example: 200.00
+        ownerPayout:
+          type: number
+          example: 3300.00
+        status:
+          type: string
+          example: COMPLETED
+
+    Payment:
+      type: object
+      properties:
+        paymentId:
+          type: string
+        bookingId:
+          type: string
+        status:
+          type: string
+        totalAmount:
+          type: number
+        rentalAmount:
+          type: number
+        platformFee:
+          type: number
+        securityDeposit:
+          type: number
+        currency:
+          type: string
+        createdAt:
+          type: string
+
+    ListPaymentsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+        nextLink:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code:
+              type: string
+              example: INVALID_INPUT
+            message:
+              type: string
+              example: Request schema validation failed
+            correlationId:
+              type: string
+              example: req-12345
+            details:
+              type: array
+              items:
+                type: object
+
+  responses:
+    BadRequestError:
+      description: Bad Request (Invalid parameters or schema validation failure)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnauthorizedError:
+      description: Unauthorized (Missing or invalid authentication token)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ForbiddenError:
+      description: Forbidden (Caller not permitted to access this resource)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Resource Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotAcceptableError:
+      description: Not Acceptable (Accept header must be application/json or application/xml)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ConflictError:
+      description: Conflict (State machine or idempotency constraint violation)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableEntityError:
+      description: Unprocessable Entity (Semantic or financial deduction violation)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequestsError:
+      description: Rate Limit Exceeded
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailableError:
+      description: Service Unavailable (Circuit breaker tripped or upstream down)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    GatewayTimeoutError:
+      description: Upstream Gateway Timeout
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

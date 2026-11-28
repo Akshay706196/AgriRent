@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="PaymentService"
+             targetNamespace="http://agrirent.internal/payments"
+             xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://agrirent.internal/payments"
+             xmlns:types="http://agrirent.internal/payments/types"
+             xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <types>
+    <xs:schema targetNamespace="http://agrirent.internal/payments/types"
+               elementFormDefault="qualified">
+      <xs:element name="GetPaymentStatusRequest">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="bookingId" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="GetPaymentStatusResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="bookingId" type="xs:string"/>
+            <xs:element name="paymentId" type="xs:string"/>
+            <xs:element name="paymentStatus" type="xs:string"/>
+            <xs:element name="depositStatus" type="xs:string"/>
+            <xs:element name="paid" type="xs:boolean"/>
+            <xs:element name="totalAmount" type="xs:decimal"/>
+            <xs:element name="currency" type="xs:string"/>
+            <xs:element name="transactionReference" type="xs:string" minOccurs="0"/>
+            <xs:element name="verifiedAt" type="xs:string" minOccurs="0"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:schema>
+  </types>
+
+  <message name="GetPaymentStatusInput">
+    <part name="parameters" element="types:GetPaymentStatusRequest"/>
+  </message>
+
+  <message name="GetPaymentStatusOutput">
+    <part name="parameters" element="types:GetPaymentStatusResponse"/>
+  </message>
+
+  <portType name="PaymentPortType">
+    <operation name="GetPaymentStatus">
+      <input message="tns:GetPaymentStatusInput"/>
+      <output message="tns:GetPaymentStatusOutput"/>
+    </operation>
+  </portType>
+
+  <binding name="PaymentSoapBinding" type="tns:PaymentPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="GetPaymentStatus">
+      <soap:operation soapAction="http://agrirent.internal/payments/GetPaymentStatus"/>
+      <input>
+        <soap:body use="literal"/>
+      </input>
+      <output>
+        <soap:body use="literal"/>
+      </output>
+    </operation>
+  </binding>
+
+  <service name="PaymentService">
+    <documentation>AgriRent Payment &amp; Security Deposit SOAP Service</documentation>
+    <port name="PaymentPort" binding="tns:PaymentSoapBinding">
+      <soap:address location="http://localhost:4004/soap/payments"/>
+    </port>
+  </service>
+
+</definitions>
