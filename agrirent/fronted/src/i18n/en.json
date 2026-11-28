@@ -1,0 +1,33 @@
+{
+  "common": {
+    "appName": "AgriRent",
+    "search": "Search",
+    "rent": "Rent",
+    "perDay": "/ day",
+    "deposit": "Security Deposit",
+    "viewDetails": "View Details",
+    "login": "Log In",
+    "register": "Register",
+    "dashboard": "Dashboard",
+    "kyc": "KYC Verification",
+    "loading": "Loading...",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "status": "Status"
+  },
+  "landing": {
+    "heroTitle": "Rent Agricultural Equipment Directly from Fellow Farmers",
+    "heroSubtitle": "Access modern tractors, harvesters, and rotavators without heavy capital expenditure. Secured with KYC, cryptographic PIN handovers, and escrow deposits.",
+    "searchPlaceholder": "Search tractors, harvesters...",
+    "howItWorksTitle": "How AgriRent Works",
+    "step1Title": "1. Find Machinery",
+    "step1Desc": "Search verified equipment listings near your district with live date availability.",
+    "step2Title": "2. Book & Escrow Pay",
+    "step2Desc": "Request rental dates and pay into secure deposit escrow once approved.",
+    "step3Title": "3. 6-Digit PIN Handover",
+    "step3Desc": "Verify dynamic one-time PINs at pickup and return for total peace of mind.",
+    "step4Title": "4. Automated Settlement",
+    "step4Desc": "Deposit is released immediately with transparent dispute and claim management."
+  }
+}
