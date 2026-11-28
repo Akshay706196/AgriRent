@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://agrirent.internal/payments/types"
+           xmlns:tns="http://agrirent.internal/payments/types"
+           elementFormDefault="qualified">
+
+  <xs:element name="GetPaymentStatusRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="bookingId" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetPaymentStatusResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="bookingId" type="xs:string"/>
+        <xs:element name="paymentId" type="xs:string"/>
+        <xs:element name="paymentStatus" type="xs:string"/>
+        <xs:element name="depositStatus" type="xs:string"/>
+        <xs:element name="paid" type="xs:boolean"/>
+        <xs:element name="totalAmount" type="xs:decimal"/>
+        <xs:element name="currency" type="xs:string"/>
+        <xs:element name="transactionReference" type="xs:string" minOccurs="0"/>
+        <xs:element name="verifiedAt" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
