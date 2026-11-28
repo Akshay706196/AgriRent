@@ -1,0 +1,423 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Booking Management Service API
+  description: Microservice for rental requests, price snapshot calculations, availability locks, approvals, cancellations, and 24-hour expiry lifecycle.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4002/api/v1
+    description: Local Development Server
+paths:
+  /bookings:
+    post:
+      summary: Request a rental booking
+      operationId: requestBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+          description: Optional idempotency key for safe retries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking request created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailableError'
+
+  /bookings/availability:
+    get:
+      summary: Check booking availability for equipment across half-open date interval [startDate, endDate)
+      operationId: checkBookingAvailability
+      parameters:
+        - name: equipmentId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Availability check outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityCheckResponse'
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+
+  /bookings/my-bookings:
+    get:
+      summary: Retrieve authenticated renter's bookings
+      operationId: getMyBookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Paginated renter bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookings'
+
+  /bookings/owner/requests:
+    get:
+      summary: Retrieve booking requests for equipment owned by authenticated user
+      operationId: getOwnerRequests
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Paginated owner booking requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookings'
+
+  /bookings/{bookingId}:
+    get:
+      summary: Retrieve booking details
+      operationId: getBookingById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /bookings/{bookingId}/approve:
+    patch:
+      summary: Equipment owner approves pending booking request
+      operationId: approveBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Booking approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /bookings/{bookingId}/reject:
+    patch:
+      summary: Equipment owner rejects pending booking request
+      operationId: rejectBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Booking rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /bookings/{bookingId}/cancel:
+    patch:
+      summary: Cancel eligible booking request
+      operationId: cancelBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CreateBookingRequest:
+      type: object
+      required:
+        - equipmentId
+        - startDate
+        - endDate
+      properties:
+        equipmentId:
+          type: string
+          example: EQ-101
+        startDate:
+          type: string
+          format: date
+          example: '2026-11-01'
+        endDate:
+          type: string
+          format: date
+          example: '2026-11-03'
+
+    Booking:
+      type: object
+      properties:
+        bookingId:
+          type: string
+        equipmentId:
+          type: string
+        renterId:
+          type: string
+        ownerId:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        rentalDays:
+          type: integer
+        pricePerDaySnapshot:
+          type: number
+        rentalAmount:
+          type: number
+        platformFee:
+          type: number
+        securityDeposit:
+          type: number
+        totalAmount:
+          type: number
+        currency:
+          type: string
+          example: INR
+        status:
+          type: string
+          enum: [PENDING_OWNER, APPROVED, REJECTED, EXPIRED, CANCELLED, IN_RENTAL, RETURNED, COMPLETED]
+        ownerResponseDeadline:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+        rejectedAt:
+          type: string
+          format: date-time
+        rejectionReason:
+          type: string
+        cancelledAt:
+          type: string
+          format: date-time
+        cancellationReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AvailabilityCheckResponse:
+      type: object
+      properties:
+        equipmentId:
+          type: string
+        startDate:
+          type: string
+        endDate:
+          type: string
+        available:
+          type: boolean
+        conflictingBookingsCount:
+          type: integer
+
+    PaginatedBookings:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Booking'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            pages:
+              type: integer
+
+    StandardError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            correlationId:
+              type: string
+            details:
+              type: object
+
+  responses:
+    InvalidInputError:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ForbiddenError:
+      description: Insufficient privileges or KYC required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ConflictError:
+      description: Date conflict or invalid state transition
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    DependencyUnavailableError:
+      description: Downstream Equipment Service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
