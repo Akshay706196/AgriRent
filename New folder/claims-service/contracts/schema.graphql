@@ -1,0 +1,220 @@
+"""
+AgriRent Claims, Disputes & Reviews GraphQL Schema
+Read-only queries with Relay-style connection pagination and DataLoader batching.
+"""
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type EvidenceItem {
+  evidenceId: ID!
+  photos: [String!]!
+  notes: String
+  addedBy: String!
+  createdAt: String!
+}
+
+type ConditionInspection {
+  engineHours: Float
+  fuelLevelPercent: Int
+  cleanliness: String
+  visualInspectionNotes: String
+  photoUrls: [String!]
+}
+
+type ConditionComparison {
+  handover: ConditionInspection
+  return: ConditionInspection
+  handoverAt: String
+  returnedAt: String
+}
+
+type ClaimDecision {
+  decisionId: ID!
+  decision: String!
+  approvedAmount: Float!
+  reason: String!
+  decidedBy: String!
+  decidedAt: String!
+}
+
+type ClaimEvent {
+  eventId: ID!
+  eventType: String!
+  actor: String!
+  actorRole: String!
+  payload: String
+  timestamp: String!
+}
+
+type Claim {
+  claimId: ID!
+  bookingId: ID!
+  claimantId: ID!
+  reason: String!
+  claimedAmount: Float!
+  status: String!
+  decision: ClaimDecision
+  windowClosesAt: String!
+  createdAt: String!
+  updatedAt: String
+  """
+  Evidence items resolved via DataLoader batching
+  """
+  evidence: [EvidenceItem!]!
+  """
+  Condition comparison snapshot captured at claim submission
+  """
+  conditionComparison: ConditionComparison
+  """
+  Timeline events resolved via DataLoader batching
+  """
+  events: [ClaimEvent!]!
+  """
+  Disputes raised against this claim
+  """
+  disputes: [Dispute!]!
+}
+
+type ClaimEdge {
+  cursor: String!
+  node: Claim!
+}
+
+type ClaimConnection {
+  edges: [ClaimEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+
+type Dispute {
+  disputeId: ID!
+  claimId: ID!
+  bookingId: ID!
+  raisedBy: String!
+  reason: String!
+  status: String!
+  decision: String
+  decisionReason: String
+  resolvedAt: String
+  createdAt: String!
+}
+
+type DisputeEdge {
+  cursor: String!
+  node: Dispute!
+}
+
+type DisputeConnection {
+  edges: [DisputeEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+
+type Review {
+  reviewId: ID!
+  bookingId: ID!
+  reviewerId: ID!
+  targetUserId: ID!
+  rating: Int!
+  feedback: String!
+  status: String!
+  createdAt: String!
+}
+
+type ReviewEdge {
+  cursor: String!
+  node: Review!
+}
+
+type ReviewConnection {
+  edges: [ReviewEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int
+}
+
+type ReviewSummary {
+  userId: ID!
+  averageRating: Float!
+  reviewCount: Int!
+  calculatedAt: String!
+}
+
+type SettlementStatus {
+  bookingId: ID!
+  caseStatus: String!
+  windowClosed: Boolean!
+  claimWindowClosesAt: String!
+  waivedAt: String
+  depositHeld: Float!
+  lateFine: Float!
+  totalDamageDeduction: Float!
+  claimsCount: Int!
+  openClaimsCount: Int!
+  openDisputesCount: Int!
+  eligibleForSettlement: Boolean!
+  settlementRequestId: String
+  settlementRequestStatus: String
+  evaluatedAt: String!
+}
+
+type BookingOverview {
+  bookingId: ID!
+  claims: [Claim!]!
+  reviews: [Review!]!
+  settlementStatus: SettlementStatus!
+}
+
+type Query {
+  """
+  Lookup a specific claim by claimId
+  """
+  claim(id: ID!): Claim
+
+  """
+  Paginated list of claims
+  """
+  claims(
+    bookingId: ID
+    status: String
+    first: Int = 10
+    after: String
+  ): ClaimConnection!
+
+  """
+  Lookup a specific dispute by disputeId
+  """
+  dispute(id: ID!): Dispute
+
+  """
+  Paginated list of disputes
+  """
+  disputes(
+    claimId: ID
+    status: String
+    first: Int = 10
+    after: String
+  ): DisputeConnection!
+
+  """
+  Paginated list of peer reviews
+  """
+  reviews(
+    targetUserId: ID
+    bookingId: ID
+    first: Int = 10
+    after: String
+  ): ReviewConnection!
+
+  """
+  Aggregated review rating summary for a user
+  """
+  reviewSummary(userId: ID!): ReviewSummary!
+
+  """
+  Single comprehensive overview of claims, disputes, evidence, reviews and settlement status for a booking
+  """
+  bookingOverview(bookingId: ID!): BookingOverview!
+}
