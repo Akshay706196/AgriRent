@@ -1,0 +1,465 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Equipment Management Service API
+  description: Microservice for listing, cataloging, filtering, and checking agricultural machinery availability.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4001/api/v1
+    description: Local Development Server
+paths:
+  /equipment:
+    post:
+      summary: Create equipment listing
+      operationId: createEquipment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEquipmentRequest'
+      responses:
+        '201':
+          description: Equipment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Equipment'
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    get:
+      summary: Search and filter equipment listings
+      operationId: searchEquipment
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [TRACTOR, HARVESTER, ROTAVATOR, SEEDER, OTHER]
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+        - name: condition
+          in: query
+          schema:
+            type: string
+            enum: [NEW, GOOD, FAIR]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, DRAFT, INACTIVE, MAINTENANCE]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paginated search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEquipment'
+
+  /equipment/{equipmentId}:
+    get:
+      summary: Get equipment details by ID
+      operationId: getEquipmentById
+      parameters:
+        - name: equipmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Equipment details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Equipment'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    patch:
+      summary: Update equipment listing
+      operationId: updateEquipment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: equipmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEquipmentRequest'
+      responses:
+        '200':
+          description: Equipment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Equipment'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+    delete:
+      summary: Soft-delete/deactivate equipment listing
+      operationId: deleteEquipment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: equipmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Equipment deactivated successfully
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /equipment/{equipmentId}/availability:
+    get:
+      summary: Check equipment availability for requested dates
+      operationId: checkEquipmentAvailability
+      parameters:
+        - name: equipmentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Availability check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResult'
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailableError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    PickupAddress:
+      type: object
+      required:
+        - address
+        - city
+        - state
+        - postalCode
+      properties:
+        address:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+
+    GeoPoint:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Point]
+        coordinates:
+          type: array
+          items:
+            type: number
+          example: [72.6369, 23.2156]
+
+    Equipment:
+      type: object
+      properties:
+        equipmentId:
+          type: string
+        ownerId:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [TRACTOR, HARVESTER, ROTAVATOR, SEEDER, OTHER]
+        description:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        manufacturingYear:
+          type: integer
+        condition:
+          type: string
+          enum: [NEW, GOOD, FAIR]
+        photos:
+          type: array
+          items:
+            type: string
+        pricePerDay:
+          type: number
+        securityDeposit:
+          type: number
+        pickupAddress:
+          $ref: '#/components/schemas/PickupAddress'
+        location:
+          $ref: '#/components/schemas/GeoPoint'
+        termsAndConditions:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, INACTIVE, MAINTENANCE]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateEquipmentRequest:
+      type: object
+      required:
+        - name
+        - category
+        - description
+        - condition
+        - pricePerDay
+        - securityDeposit
+        - pickupAddress
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          enum: [TRACTOR, HARVESTER, ROTAVATOR, SEEDER, OTHER]
+        description:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        manufacturingYear:
+          type: integer
+        condition:
+          type: string
+          enum: [NEW, GOOD, FAIR]
+        photos:
+          type: array
+          items:
+            type: string
+        pricePerDay:
+          type: number
+          minimum: 1
+        securityDeposit:
+          type: number
+          minimum: 0
+        pickupAddress:
+          $ref: '#/components/schemas/PickupAddress'
+        location:
+          $ref: '#/components/schemas/GeoPoint'
+        termsAndConditions:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE]
+          default: ACTIVE
+
+    UpdateEquipmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        manufacturingYear:
+          type: integer
+        condition:
+          type: string
+          enum: [NEW, GOOD, FAIR]
+        photos:
+          type: array
+          items:
+            type: string
+        pricePerDay:
+          type: number
+          minimum: 1
+        securityDeposit:
+          type: number
+          minimum: 0
+        pickupAddress:
+          $ref: '#/components/schemas/PickupAddress'
+        termsAndConditions:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, INACTIVE, MAINTENANCE]
+
+    PaginatedEquipment:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Equipment'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            pages:
+              type: integer
+
+    AvailabilityResult:
+      type: object
+      properties:
+        equipmentId:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        available:
+          type: boolean
+
+    StandardError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            correlationId:
+              type: string
+            details:
+              type: object
+
+  responses:
+    InvalidInputError:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ForbiddenError:
+      description: Insufficient privileges or KYC required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ConflictError:
+      description: Conflict with existing state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ValidationError:
+      description: Business validation failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    DependencyUnavailableError:
+      description: Downstream service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'

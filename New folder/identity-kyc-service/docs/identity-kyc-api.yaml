@@ -1,0 +1,523 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Identity and KYC Service API
+  description: Microservice for user registration, authentication, profile management, KYC submission and admin verification, and inter-service eligibility assertions.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4003/api/v1
+    description: Local Development Server
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/login:
+    post:
+      summary: Authenticate user and issue JWT
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /auth/me:
+    get:
+      summary: Get authenticated user profile
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/change-password:
+    patch:
+      summary: Change user password
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password updated successfully
+        '400':
+          $ref: '#/components/responses/InvalidInputError'
+
+  /users/me:
+    get:
+      summary: Get own profile details
+      operationId: getOwnProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+    patch:
+      summary: Update permitted profile fields
+      operationId: updateOwnProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /users/{userId}/eligibility:
+    get:
+      summary: Service-to-service eligibility assertion
+      operationId: getUserEligibility
+      security:
+        - ServiceAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /kyc/submit:
+    post:
+      summary: Submit identity verification documents
+      operationId: submitKyc
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KycSubmitRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KycSubmitResponse'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /kyc/me:
+    get:
+      summary: Get own current KYC status
+      operationId: getOwnKycStatus
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KycStatusResponse'
+
+  /kyc/me/history:
+    get:
+      summary: Get own KYC submission history
+      operationId: getOwnKycHistory
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of historical submissions
+
+  /kyc/admin/pending:
+    get:
+      summary: List pending KYC submissions (Admin only)
+      operationId: listPendingKyc
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Paginated pending submissions
+
+  /kyc/admin/{kycId}/approve:
+    patch:
+      summary: Approve KYC submission (Admin only)
+      operationId: approveKyc
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: kycId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                decisionNote:
+                  type: string
+      responses:
+        '200':
+          description: KYC approved
+
+  /kyc/admin/{kycId}/reject:
+    patch:
+      summary: Reject KYC submission (Admin only)
+      operationId: rejectKyc
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: kycId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: KYC rejected
+
+  /admin/users/{userId}/suspend:
+    patch:
+      summary: Suspend user account (Admin only)
+      operationId: suspendUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Account suspended
+
+  /admin/users/{userId}/restore:
+    patch:
+      summary: Restore user account (Admin only)
+      operationId: restoreUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account restored to ACTIVE
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ServiceAuth:
+      type: apiKey
+      in: header
+      name: x-service-client-id
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - phone
+        - password
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginRequest:
+      type: object
+      required:
+        - identifier
+        - password
+      properties:
+        identifier:
+          type: string
+          description: Email or phone number
+        password:
+          type: string
+          format: password
+
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            accountStatus:
+              type: string
+              enum: [ACTIVE, SUSPENDED, BLOCKED, DEACTIVATED]
+            kycStatus:
+              type: string
+              enum: [NOT_SUBMITTED, PENDING, UNDER_REVIEW, VERIFIED, REJECTED, RESUBMISSION_REQUIRED]
+            roles:
+              type: array
+              items:
+                type: string
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            tokenType:
+              type: string
+              example: Bearer
+            expiresIn:
+              type: integer
+              example: 900
+            user:
+              $ref: '#/components/schemas/UserResponse'
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+
+    EligibilityResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            userId:
+              type: string
+            exists:
+              type: boolean
+            accountStatus:
+              type: string
+            kycStatus:
+              type: string
+            canRent:
+              type: boolean
+            canListEquipment:
+              type: boolean
+
+    KycSubmitRequest:
+      type: object
+      required:
+        - documentType
+        - documentReference
+      properties:
+        documentType:
+          type: string
+          enum: [GOVERNMENT_ID, AADHAAR, PAN, DRIVING_LICENSE, PASSPORT, VOTER_ID, FARMER_ID]
+        documentReference:
+          type: string
+
+    KycSubmitResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            kycId:
+              type: string
+            status:
+              type: string
+            submittedAt:
+              type: string
+              format: date-time
+
+    KycStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            kycStatus:
+              type: string
+            latestSubmission:
+              type: object
+
+    StandardError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            correlationId:
+              type: string
+            details:
+              type: object
+
+  responses:
+    InvalidInputError:
+      description: Invalid payload syntax or format
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    UnauthorizedError:
+      description: Authentication failed or credentials missing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ForbiddenError:
+      description: Insufficient role permissions or blocked account
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    NotFoundError:
+      description: Requested resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ConflictError:
+      description: Conflict such as duplicate email or pending submission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'
+    ValidationError:
+      description: Field validation failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardError'

@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: agrirent-mongodb
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  identity-kyc-service:
+    build:
+      context: ./identity-kyc-service
+      dockerfile: Dockerfile
+    container_name: agrirent-identity-service
+    restart: unless-stopped
+    ports:
+      - '4003:4003'
+    environment:
+      - PORT=4003
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_identity
+      - JWT_SECRET=agrirent_super_secret_jwt_key_2026_dev
+    depends_on:
+      - mongodb
+
+  equipment-service:
+    build:
+      context: ./equipment-service
+      dockerfile: Dockerfile
+    container_name: agrirent-equipment-service
+    restart: unless-stopped
+    ports:
+      - '4001:4001'
+    environment:
+      - PORT=4001
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_equipment
+      - IDENTITY_SERVICE_URL=http://identity-kyc-service:4003
+    depends_on:
+      - mongodb
+      - identity-kyc-service
+
+  booking-service:
+    build:
+      context: ./booking-service
+      dockerfile: Dockerfile
+    container_name: agrirent-booking-service
+    restart: unless-stopped
+    ports:
+      - '4002:4002'
+    environment:
+      - PORT=4002
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_bookings
+      - EQUIPMENT_SERVICE_URL=http://equipment-service:4001
+      - IDENTITY_SERVICE_URL=http://identity-kyc-service:4003
+      - INTERNAL_SERVICE_TOKEN=agrirent_internal_service_token_2026
+    depends_on:
+      - mongodb
+      - equipment-service
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: agrirent-payment-service
+    restart: unless-stopped
+    ports:
+      - '4004:4004'
+    environment:
+      - PORT=4004
+      - NODE_ENV=production
+      - SQL_DB_PATH=/usr/src/app/data/agrirent_payments.sqlite
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_payments
+      - PAYMENT_GATEWAY=simulator
+      - BOOKING_SERVICE_URL=http://booking-service:4002
+      - IDENTITY_SERVICE_URL=http://identity-kyc-service:4003
+      - INTERNAL_SERVICE_TOKEN=agrirent_internal_service_token_2026
+      - GATEWAY_WEBHOOK_SECRET=agrirent_webhook_secret_key_2026_dev
+    depends_on:
+      - mongodb
+      - booking-service
+
+  handover-service:
+    build:
+      context: ./handover-service
+      dockerfile: Dockerfile
+    container_name: agrirent-handover-service
+    restart: unless-stopped
+    ports:
+      - '4005:4005'
+    environment:
+      - PORT=4005
+      - NODE_ENV=production
+      - SQL_DB_PATH=/usr/src/app/data/agrirent_handovers.sqlite
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_handovers
+      - BOOKING_SERVICE_URL=http://booking-service:4002
+      - PAYMENT_SERVICE_URL=http://payment-service:4004
+      - IDENTITY_SERVICE_URL=http://identity-kyc-service:4003
+      - INTERNAL_SERVICE_TOKEN=agrirent_internal_service_token_2026
+      - PIN_PEPPER=agrirent_pin_pepper_2026_prod
+      - DEV_EXPOSE_PIN=false
+      - BUSINESS_TIMEZONE=Asia/Kolkata
+      - GRACE_PERIOD_MINUTES=30
+      - LATE_FINE_DAILY_RATE=300000
+      - LATE_FINE_CAP_AT_DEPOSIT=true
+    depends_on:
+      - mongodb
+      - booking-service
+      - payment-service
+
+  claims-service:
+    build:
+      context: ./claims-service
+      dockerfile: Dockerfile
+    container_name: agrirent-claims-service
+    restart: unless-stopped
+    ports:
+      - '4006:4006'
+    environment:
+      - PORT=4006
+      - NODE_ENV=production
+      - SQL_DB_PATH=/usr/src/app/data/agrirent_claims.sqlite
+      - MONGODB_URI=mongodb://mongodb:27017/agrirent_claims
+      - BOOKING_SERVICE_URL=http://booking-service:4002
+      - PAYMENT_SERVICE_URL=http://payment-service:4004
+      - HANDOVER_SERVICE_URL=http://handover-service:4005
+      - IDENTITY_SERVICE_URL=http://identity-kyc-service:4003
+      - INTERNAL_SERVICE_TOKEN=agrirent_internal_service_token_2026
+      - CLAIM_WINDOW_HOURS=48
+      - DISPUTE_WINDOW_HOURS=72
+      - REVIEW_WINDOW_DAYS=14
+      - EVIDENCE_MAX_PHOTOS=10
+      - DISPUTE_HOLD_POLICY=BLOCK_SETTLEMENT
+      - SETTLEMENT_MAX_ATTEMPTS=3
+    depends_on:
+      - mongodb
+      - booking-service
+      - payment-service
+      - handover-service
+
+volumes:
+  mongo_data:
+
+
