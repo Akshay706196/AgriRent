@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema targetNamespace="http://agrirent.internal/handover/types"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://agrirent.internal/handover/types"
+           elementFormDefault="qualified">
+
+  <xs:element name="CalculateLateFineRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="bookingId" type="xs:string"/>
+        <xs:element name="actualReturnTimestamp" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="CalculateLateFineResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="bookingId" type="xs:string"/>
+        <xs:element name="overdueMinutes" type="xs:integer"/>
+        <xs:element name="overdueDays" type="xs:integer"/>
+        <xs:element name="fineAmount" type="xs:decimal"/>
+        <xs:element name="currency" type="xs:string"/>
+        <xs:element name="dueDate" type="xs:string" minOccurs="0"/>
+        <xs:element name="actualReturn" type="xs:string" minOccurs="0"/>
+        <xs:element name="depositCapApplied" type="xs:boolean" minOccurs="0"/>
+        <xs:element name="calculatedAt" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>

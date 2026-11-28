@@ -1,0 +1,738 @@
+openapi: 3.0.3
+info:
+  title: AgriRent Handover, Return & Late-Fine Service API
+  description: |
+    Microservice 5 of the AgriRent SOA Architecture.
+    
+    ### Scope & Business Contract
+    Responsible for securing equipment physical possession transfer, returning machinery, 
+    verifying single-use cryptographic PINs, recording audit timestamps, capturing condition reports, 
+    and assessing overdue rental penalties.
+    
+    ### Roles & Authorizations
+    - **Renter**: Generates handover and return PINs to present to the machinery owner.
+    - **Owner**: Verifies handover and return PINs to validate physical transfer.
+    - **Admin**: Has administrative visibility across all records, condition reports, and audit trails.
+    - **Internal Service**: May initiate automated transitions via `internal_service_token`.
+    
+    ### PIN Security Rules
+    - 6-digit random numeric codes generated via cryptographic PRNG.
+    - Stored strictly as HMAC-SHA256 hashes using a secret server pepper; constant-time comparison enforced.
+    - Plaintext PIN is never stored in databases, never in log streams, never in idempotency snapshots.
+    - Single-use enforced atomically inside SQL transactions.
+    - Locked (HTTP 423) after 3 failed verification attempts.
+    
+    ### Late Fine Calculation Formula
+    - `dueAt`: booking `endDate` at 00:00:00 in `BUSINESS_TIMEZONE` (`Asia/Kolkata` / UTC+05:30), reflecting exclusive end date convention.
+    - `threshold`: `dueAt + GRACE_PERIOD_MINUTES` (default 30 mins).
+    - `overdue`: `actualReturn - threshold`.
+    - If `overdue <= 0` -> fine = 0.
+    - Else `overdueDays = ceil(overdue / 24h)`.
+    - `fineAmount = overdueDays * LATE_FINE_DAILY_RATE` (stored internally in integer minor paise).
+    - Capped at booking's security deposit when `LATE_FINE_CAP_AT_DEPOSIT=true`.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4005
+    description: Local Development & Test Server
+
+paths:
+  /v1/bookings/{bookingId}/handover-pins:
+    post:
+      summary: Generate Handover PIN
+      description: Issues a single-use 6-digit PIN for equipment handover. Supersedes previous active PIN.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '201':
+          description: PIN generated and dispatched to renter notification channel.
+          headers:
+            x-correlation-id:
+              $ref: '#/components/headers/CorrelationIdHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PinGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict due to booking state or payment status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/bookings/{bookingId}/handovers:
+    post:
+      summary: Verify Handover PIN
+      description: Equipment owner verifies the renter's handover PIN to complete machine possession transfer.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPinRequest'
+      responses:
+        '201':
+          description: Handover verified successfully. Booking transitions to IN_RENTAL.
+          headers:
+            x-correlation-id:
+              $ref: '#/components/headers/CorrelationIdHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: PIN already used, expired, or invalid booking state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid 6-digit PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '423':
+          description: PIN locked due to too many failed attempts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/bookings/{bookingId}/return-pins:
+    post:
+      summary: Generate Return PIN
+      description: Issues a single-use 6-digit PIN for equipment return. Booking must be IN_RENTAL.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '201':
+          description: PIN generated and dispatched to renter notification channel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PinGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Booking not in rental status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/bookings/{bookingId}/returns:
+    post:
+      summary: Verify Return PIN & Assess Fine
+      description: Equipment owner verifies return PIN. Machine transitions to RETURNED and late fine is atomically assessed.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPinRequest'
+      responses:
+        '201':
+          description: Equipment returned successfully. Status transitions to RETURNED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: PIN already used, expired, or invalid booking state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid 6-digit PIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '423':
+          description: PIN locked due to too many failed attempts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/bookings/{bookingId}/late-fine:
+    get:
+      summary: Retrieve Stored Fine or Preview Penalty
+      description: Returns persisted late fine if returned, or calculates dynamic preview if returnTime query param is provided.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: returnTime
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Optional preview return timestamp
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - $ref: '#/components/parameters/AcceptHeader'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '200':
+          description: Late fine assessment details.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETagHeader'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LateFineDetails'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/LateFineDetails'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /v1/bookings/{bookingId}/handovers/{handoverId}:
+    get:
+      summary: Get Handover Details
+      description: Retrieves machine handover record with ETag caching and XML content negotiation.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: handoverId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - $ref: '#/components/parameters/AcceptHeader'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '200':
+          description: Handover record.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETagHeader'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/HandoverRecord'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /v1/bookings/{bookingId}/returns/{returnId}:
+    get:
+      summary: Get Return Details
+      description: Retrieves return record and assessed late fine.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: returnId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - $ref: '#/components/parameters/AcceptHeader'
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '200':
+          description: Return record.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETagHeader'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReturnRecord'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/ReturnRecord'
+        '304':
+          $ref: '#/components/responses/NotModified'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/handovers:
+    get:
+      summary: List Handovers
+      description: Cursor-paginated listing of handovers.
+      parameters:
+        - name: bookingId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [IN_RENTAL, COMPLETED]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '200':
+          description: List of handovers.
+          headers:
+            Link:
+              $ref: '#/components/headers/LinkHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHandovers'
+
+  /v1/bookings/{bookingId}/events:
+    get:
+      summary: List Booking Audit Events
+      description: Cursor-paginated timeline of PIN lifecycle, handovers, and condition reports stored in MongoDB.
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+        - InternalServiceToken: []
+      responses:
+        '200':
+          description: Event timeline.
+          headers:
+            Link:
+              $ref: '#/components/headers/LinkHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEvents'
+
+  /health:
+    get:
+      summary: Liveness Probe
+      responses:
+        '200':
+          description: Service is healthy.
+
+  /ready:
+    get:
+      summary: Readiness Probe
+      responses:
+        '200':
+          description: Service dependencies are connected.
+        '503':
+          description: Database connection offline.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalServiceToken:
+      type: apiKey
+      in: header
+      name: internal_service_token
+
+  parameters:
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: false
+      schema:
+        type: string
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      schema:
+        type: string
+    AcceptHeader:
+      name: Accept
+      in: header
+      required: false
+      schema:
+        type: string
+        default: application/json
+
+  headers:
+    CorrelationIdHeader:
+      schema:
+        type: string
+      description: Echoed unique trace identifier.
+    ETagHeader:
+      schema:
+        type: string
+      description: Entity tag validator.
+    CacheControlHeader:
+      schema:
+        type: string
+      description: Caching policy directive.
+    LinkHeader:
+      schema:
+        type: string
+      description: Next page cursor link.
+
+  schemas:
+    PinGenerationResponse:
+      type: object
+      required:
+        - pinId
+        - deliveryStatus
+        - expiresAt
+      properties:
+        pinId:
+          type: string
+          example: PIN-9D82A1B4
+        deliveryStatus:
+          type: string
+          example: DELIVERED
+        expiresAt:
+          type: string
+          format: date-time
+        dev_pin:
+          type: string
+          description: Plaintext PIN attached in development/test environment only.
+
+    VerifyPinRequest:
+      type: object
+      required:
+        - pin
+      properties:
+        pin:
+          type: string
+          pattern: '^[0-9]{6}$'
+          example: "482910"
+        conditionReport:
+          type: object
+          properties:
+            engineHours:
+              type: number
+              example: 412.5
+            fuelLevelPercent:
+              type: integer
+              example: 95
+            cleanliness:
+              type: string
+              enum: [EXCELLENT, GOOD, FAIR, DIRTY]
+              example: GOOD
+            visualInspectionNotes:
+              type: string
+              example: Front hitch inspected, normal wear.
+            photoUrls:
+              type: array
+              items:
+                type: string
+
+    HandoverResponse:
+      type: object
+      required:
+        - handoverId
+        - handedOverAt
+        - status
+      properties:
+        handoverId:
+          type: string
+          example: HO-4F12BC99
+        handedOverAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: IN_RENTAL
+
+    ReturnResponse:
+      type: object
+      required:
+        - returnId
+        - returnedAt
+        - status
+        - lateFine
+      properties:
+        returnId:
+          type: string
+          example: RET-A91B82CC
+        returnedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: RETURNED
+        lateFine:
+          $ref: '#/components/schemas/LateFineDetails'
+
+    LateFineDetails:
+      type: object
+      properties:
+        fineId:
+          type: string
+        bookingId:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+        actualReturn:
+          type: string
+          format: date-time
+        gracePeriodMinutes:
+          type: integer
+        overdueDuration:
+          type: string
+          example: PT48H0M
+        overdueMinutes:
+          type: integer
+        overdueDays:
+          type: integer
+        dailyRate:
+          type: number
+          example: 3000.00
+        fineAmount:
+          type: number
+          example: 6000.00
+        depositCapApplied:
+          type: boolean
+        currency:
+          type: string
+          example: INR
+        calculatedAt:
+          type: string
+          format: date-time
+
+    HandoverRecord:
+      type: object
+      properties:
+        handoverId:
+          type: string
+        bookingId:
+          type: string
+        handedOverBy:
+          type: string
+        handedOverTo:
+          type: string
+        handedOverAt:
+          type: string
+        status:
+          type: string
+
+    ReturnRecord:
+      type: object
+      properties:
+        returnId:
+          type: string
+        bookingId:
+          type: string
+        returnedBy:
+          type: string
+        returnedTo:
+          type: string
+        returnedAt:
+          type: string
+        status:
+          type: string
+        lateFine:
+          $ref: '#/components/schemas/LateFineDetails'
+
+    PaginatedHandovers:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HandoverRecord'
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+
+    PaginatedEvents:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - correlationId
+          properties:
+            code:
+              type: string
+              example: INVALID_PIN
+            message:
+              type: string
+              example: Incorrect verification PIN.
+            correlationId:
+              type: string
+              example: corr-7a8b9c0d
+            details:
+              type: array
+              items:
+                type: object
+
+  responses:
+    BadRequest:
+      description: Invalid request payload, schema failure, or missing parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication Bearer token missing, expired, or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Caller lacks required permissions or is not the authorized participant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotModified:
+      description: Resource unchanged matching ETag If-None-Match condition.
+    NotAcceptable:
+      description: Requested media representation not supported (Accept must be application/json or application/xml).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until retry window resets.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
