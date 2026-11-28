@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://agrirent.internal/claims"
+           xmlns:tns="http://agrirent.internal/claims"
+           elementFormDefault="qualified">
+
+  <xs:element name="GetDisputeStatusRequest">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="disputeId" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:element name="GetDisputeStatusResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="disputeId" type="xs:string"/>
+        <xs:element name="claimId" type="xs:string"/>
+        <xs:element name="status" type="xs:string"/>
+        <xs:element name="decision" type="xs:string" minOccurs="0"/>
+        <xs:element name="reason" type="xs:string" minOccurs="0"/>
+        <xs:element name="resolvedAt" type="xs:string" minOccurs="0"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+
+</xs:schema>
